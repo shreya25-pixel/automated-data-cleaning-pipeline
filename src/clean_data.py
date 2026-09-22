@@ -1,31 +1,209 @@
+```python
+from pathlib import Path
 import pandas as pd
 
-input_file = "data/raw/customers.csv"
-output_file = "data/cleaned/customers_cleaned.csv"
 
-df = pd.read_csv(input_file)
+# --------------------------------------------------
+# 1. Define folders
+# --------------------------------------------------
 
-# Remove duplicate records
-df = df.drop_duplicates()
+RAW_FOLDER = Path("data/raw")
+CLEANED_FOLDER = Path("data/cleaned")
 
-# Remove unnecessary spaces
-df.columns = df.columns.str.strip()
+# Create cleaned folder if it doesn't exist
+CLEANED_FOLDER.mkdir(parents=True, exist_ok=True)
 
-# Standardize text
-df["customer_name"] = df["customer_name"].str.strip().str.title()
 
-# Handle missing values
-df["email"] = df["email"].fillna("unknown@email.com")
+# --------------------------------------------------
+# 2. Find all CSV files
+# --------------------------------------------------
 
-# Convert date
-df["order_date"] = pd.to_datetime(
-    df["order_date"],
-    errors="coerce"
-)
+csv_files = list(RAW_FOLDER.glob("*.csv"))
 
-# Remove invalid records
-df = df.dropna(subset=["customer_id"])
+if not csv_files:
+    raise FileNotFoundError(
+        "No CSV files found inside the data/raw folder."
+    )
 
-df.to_csv(output_file, index=False)
+print(f"Found {len(csv_files)} CSV file(s).")
 
-print("Data cleaning completed successfully!")
+
+# --------------------------------------------------
+# 3. Process each CSV file
+# --------------------------------------------------
+
+for input_file in csv_files:
+
+    print("\n" + "=" * 60)
+    print(f"Processing: {input_file.name}")
+    print("=" * 60)
+
+    try:
+
+        # ------------------------------------------
+        # Read CSV
+        # ------------------------------------------
+
+        df = pd.read_csv(input_file)
+
+        print(f"Original rows    : {len(df)}")
+        print(f"Original columns : {len(df.columns)}")
+
+
+        # ------------------------------------------
+        # Remove completely empty rows
+        # ------------------------------------------
+
+        df = df.dropna(how="all")
+
+
+        # ------------------------------------------
+        # Clean column names
+        # ------------------------------------------
+
+        df.columns = (
+            df.columns
+            .str.strip()
+            .str.lower()
+            .str.replace(" ", "_")
+            .str.replace(r"[^\w]+", "_", regex=True)
+            .str.strip("_")
+        )
+
+
+        # ------------------------------------------
+        # Remove duplicate rows
+        # ------------------------------------------
+
+        duplicates = df.duplicated().sum()
+
+        df = df.drop_duplicates()
+
+        print(f"Duplicates removed: {duplicates}")
+
+
+        # ------------------------------------------
+        # Clean text columns
+        # ------------------------------------------
+
+        text_columns = df.select_dtypes(
+            include=["object", "string"]
+        ).columns
+
+        for column in text_columns:
+
+            df[column] = (
+                df[column]
+                .astype("string")
+                .str.strip()
+            )
+
+
+        # ------------------------------------------
+        # Convert empty strings to NULL
+        # ------------------------------------------
+
+        df = df.replace(
+            r"^\s*$",
+            pd.NA,
+            regex=True
+        )
+
+
+        # ------------------------------------------
+        # Remove completely empty columns
+        # ------------------------------------------
+
+        empty_columns = [
+            column
+            for column in df.columns
+            if df[column].isna().all()
+        ]
+
+        if empty_columns:
+
+            print(
+                f"Empty columns removed: {empty_columns}"
+            )
+
+            df = df.drop(columns=empty_columns)
+
+
+        # ------------------------------------------
+        # Try to detect date columns
+        # ------------------------------------------
+
+        for column in df.columns:
+
+            column_name = column.lower()
+
+            if any(
+                keyword in column_name
+                for keyword in [
+                    "date",
+                    "dob",
+                    "birth",
+                    "created",
+                    "updated"
+                ]
+            ):
+
+                try:
+
+                    converted = pd.to_datetime(
+                        df[column],
+                        errors="coerce"
+                    )
+
+                    # Only replace the column if
+                    # some valid dates were detected
+
+                    if converted.notna().sum() > 0:
+                        df[column] = converted
+
+                except Exception:
+                    pass
+
+
+        # ------------------------------------------
+        # Save cleaned file
+        # ------------------------------------------
+
+        output_file = CLEANED_FOLDER / (
+            f"{input_file.stem}_cleaned.csv"
+        )
+
+        df.to_csv(
+            output_file,
+            index=False
+        )
+
+
+        # ------------------------------------------
+        # Print summary
+        # ------------------------------------------
+
+        print(f"Cleaned rows     : {len(df)}")
+        print(f"Cleaned columns  : {len(df.columns)}")
+        print(f"Saved to         : {output_file}")
+
+        print("Status           : SUCCESS")
+
+
+    except Exception as e:
+
+        print(
+            f"ERROR processing {input_file.name}: {e}"
+        )
+
+        raise
+
+
+# --------------------------------------------------
+# 4. Pipeline completed
+# --------------------------------------------------
+
+print("\n" + "=" * 60)
+print("ALL CSV FILES PROCESSED SUCCESSFULLY")
+print("=" * 60)
+```
