@@ -7,70 +7,58 @@ on:
     paths:
       - "data/raw/**"
       - "src/**"
+      - "tests/**"
       - "requirements.txt"
       - ".github/workflows/**"
 
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-
   clean-data:
-
     runs-on: ubuntu-latest
 
     steps:
-
-      # --------------------------------------------------
-      # Checkout repository
-      # --------------------------------------------------
-
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # --------------------------------------------------
-      # Setup Python
-      # --------------------------------------------------
-
+      # 2. Setup Python
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: "pip"
 
-      # --------------------------------------------------
-      # Install dependencies
-      # --------------------------------------------------
-
+      # 3. Install dependencies
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # --------------------------------------------------
-      # Run data cleaning
-      # --------------------------------------------------
-
+      # 4. Run data cleaning
       - name: Run CSV data cleaning
         run: |
           python src/clean_data.py
 
-      # --------------------------------------------------
-      # Run data quality tests
-      # --------------------------------------------------
-
+      # 5. Run tests
       - name: Run tests
         run: |
           pytest
 
-      # --------------------------------------------------
-      # Upload cleaned files to GitHub repository
-      # --------------------------------------------------
+      # 6. Check generated files
+      - name: Check cleaned files
+        run: |
+          echo "Cleaned files:"
+          ls -lah data/cleaned/
 
+      # 7. Commit cleaned data
       - name: Commit cleaned data
         run: |
-
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
